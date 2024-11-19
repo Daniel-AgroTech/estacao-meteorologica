@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estação Meteorológica</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f7f7f7;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #ff6600;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-size: 1.5rem;
+      position: relative;
+    }
+    #last-update {
+      font-size: 0.9rem;
+      margin-top: 5px;
+    }
+    #refresh-btn {
+      position: absolute;
+      right: 20px;
+      top: 20px;
+      background-color: #ffffff;
+      color: #ff6600;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+    #refresh-btn:hover {
+      background-color: #ff6600;
+      color: #fff;
+    }
+    main {
+      padding: 20px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .station-selector {
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .station-selector label {
+      font-size: 1rem;
+    }
+    .station-selector select {
+      padding: 10px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .charts-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .chart-card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      flex: 1 1 calc(50% - 20px);
+      height: 400px; /* Altura ajustada */
+    }
+    canvas {
+      max-width: 100%;
+      max-height: 100%;
+    }
+    footer {
+      text-align: center;
+      margin-top: 20px;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    Painel Meteorológico
+    <div id="last-update">Última atualização: --</div>
+    <button id="refresh-btn">Atualizar</button>
+  </header>
+  <main>
+    <div class="container">
+      <div class="station-selector">
+        <label for="station-select">Selecione a estação:</label>
+        <select id="station-select">
+          <option value="1">1 - IDR-Paraná</option>
+          <option value="2">2 - Teste 1</option>
+          <option value="3">3 - Cidade</option>
+          <option value="4">4 - Palhano</option>
+          <option value="5">5 - Fazenda Escola</option>
+        </select>
+      </div>
+      <div class="charts-container">
+        <div class="chart-card">
+          <canvas id="precipitation-chart"></canvas>
+        </div>
+        <div class="chart-card">
+          <canvas id="temperature-chart"></canvas>
+        </div>
+        <div class="chart-card">
+          <canvas id="humidity-chart"></canvas>
+        </div>
+        <div class="chart-card">
+          <canvas id="wind-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer>
+    Desenvolvido para monitoramento de estações meteorológicas.
+  </footer>
+  <script>
+    const stationSelect = document.getElementById('station-select');
+    const refreshButton = document.getElementById('refresh-btn');
+    const lastUpdate = document.getElementById('last-update');
+    const apiBaseUrl = "http://200.201.27.60:3000/prototipo/dia";
+
+    const precipitationChart = createBarChart('precipitation-chart', 'Precipitação (mm)', '#ff6600');
+    const temperatureChart = createLineChart('temperature-chart', 'Temperatura (°C)', '#28a745');
+    const humidityChart = createLineChart('humidity-chart', 'Umidade (%)', '#007bff');
+    const windChart = createLineChart('wind-chart', 'Velocidade do Vento (Km/h)', '#ffc107');
+
+    function createLineChart(canvasId, label, color) {
+      return new Chart(document.getElementById(canvasId), {
+        type: 'line',
+        data: { labels: [], datasets: [{ label, data: [], borderColor: color, fill: false }] },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    function createBarChart(canvasId, label, color) {
+      return new Chart(document.getElementById(canvasId), {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label, data: [], backgroundColor: color }] },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    async function fetchStationData(stationId) {
+      const today = new Date().toISOString().split('T')[0];
+      const url = `${apiBaseUrl}?dia=${today}&estacao=${stationId}`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Erro na API');
+        return await response.json();
+      } catch (error) {
+        console.error("Erro ao buscar dados:", error);
+        return null;
+      }
+    }
+
+    function filterData(data) {
+      return data.filter(entry => 
+        entry.temp >= -20 && entry.temp <= 60 &&
+        entry.hum >= 1 &&
+        entry.vvento <= 150
+      );
+    }
+
+    function updateChart(chart, labels, data) {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = data;
+      chart.update();
+    }
+
+    async function updateCharts(stationId) {
+      const data = await fetchStationData(stationId);
+      if (!data || data.length === 0) {
+        console.error("Nenhum dado encontrado para a estação:", stationId);
+        return;
+      }
+
+      const filteredData = filterData(data);
+
+      const sortedData = filteredData.sort((a, b) => new Date(a.time) - new Date(b.time));
+      const times = sortedData.map(entry => entry.time.split(" ")[1]);
+      const precipitation = sortedData.map(entry => entry.precipitacao || 0);
+      const temperature = sortedData.map(entry => entry.temp || 0);
+      const humidity = sortedData.map(entry => entry.hum || 0);
+      const windSpeed = sortedData.map(entry => entry.vvento || 0);
+
+      updateChart(precipitationChart, times, precipitation);
+      updateChart(temperatureChart, times, temperature);
+      updateChart(humidityChart, times, humidity);
+      updateChart(windChart, times, windSpeed);
+
+      lastUpdate.textContent = `Última atualização: ${new Date().toLocaleString()}`;
+    }
+
+    stationSelect.addEventListener('change', () => {
+      const stationId = stationSelect.value;
+      updateCharts(stationId);
+    });
+
+    refreshButton.addEventListener('click', () => {
+      updateCharts(stationSelect.value);
+    });
+
+    updateCharts(stationSelect.value);
+  </script>
+</body>
+</html>
